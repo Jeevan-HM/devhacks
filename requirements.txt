@@ -1,0 +1,7 @@
+flask
+torch
+torchaudio
+librosa
+audiocraft
+matplotlib
+numpy<2

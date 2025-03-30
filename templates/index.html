@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>VocaLift - Humming Voice Generator</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: #ffffff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .container {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: 2rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+      padding: 3rem;
+      width: 100%;
+      max-width: 600px;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 1.5rem;
+    }
+
+    input[type="text"],
+    input[type="file"] {
+      width: 100%;
+      padding: 0.8rem 1rem;
+      border: none;
+      border-radius: 1rem;
+      margin-top: 1rem;
+      font-size: 1rem;
+      outline: none;
+      background-color: rgba(255, 255, 255, 0.2);
+      color: #fff;
+    }
+
+    input[type="text"]::placeholder {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    button {
+      margin-top: 1.5rem;
+      padding: 0.8rem 2rem;
+      font-size: 1rem;
+      font-weight: bold;
+      color: #fff;
+      border: none;
+      border-radius: 1rem;
+      cursor: pointer;
+      background: linear-gradient(to right, #00c6ff, #0072ff);
+    }
+
+    button:hover {
+      background: linear-gradient(to right, #0072ff, #00c6ff);
+    }
+
+    .spinner {
+      border: 5px solid rgba(255, 255, 255, 0.3);
+      border-top: 5px solid #ffffff;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 1rem auto;
+    }
+
+    @keyframes spin {
+      0%   { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    #checkmark, #translate-check, #pitch-check {
+      font-size: 2rem;
+      margin-top: 1rem;
+      color: #00ffb3;
+    }
+
+    audio {
+      margin-top: 1.5rem;
+      width: 100%;
+      border-radius: 1rem;
+    }
+
+    #translateButton {
+      background: linear-gradient(to right, #f7971e, #ffd200);
+    }
+
+    #translateButton:hover {
+      background: linear-gradient(to right, #ffd200, #f7971e);
+    }
+
+    #pitchButton {
+      background: linear-gradient(to right, #38ef7d, #11998e);
+    }
+
+    #pitchButton:hover {
+      background: linear-gradient(to right, #11998e, #38ef7d);
+    }
+
+    hr {
+      margin: 2rem 0;
+      border: none;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎵 VocaLift - Giving Sound to the Unheard 🎵</h1>
+
+    <form id="hummingForm">
+      <input type="text" name="sentence" placeholder="Enter a sentence..." required />
+      <button type="submit">Generate Humming Audio</button>
+    </form>
+
+    <hr />
+
+    <h3>🔊 Or Upload Your Own Humming</h3>
+    <form id="uploadForm" enctype="multipart/form-data">
+      <input type="file" name="audio" accept="audio/wav,audio/mp3" required />
+      <button type="submit">Upload & Use Audio</button>
+    </form>
+
+    <div id="status-icon" style="display: none;">
+      <div class="spinner" id="spinner"></div>
+      <div id="checkmark" style="display: none;">✅</div>
+      <p id="status-text">Processing...</p>
+    </div>
+
+    <audio id="audioPlayer" controls style="display: none;"></audio>
+
+    <button id="translateButton">🗣️ Translate Humming</button>
+
+    <div id="translate-status" style="display: none;">
+      <div class="spinner" id="translate-spinner"></div>
+      <div id="translate-check" style="display: none;">✅</div>
+      <p id="translate-result">Translating...</p>
+    </div>
+
+    <button id="pitchButton" style="display: none;">📈 Show Pitch Contour</button>
+
+    <div id="pitch-status" style="display: none;">
+      <div class="spinner" id="pitch-spinner"></div>
+      <div id="pitch-check" style="display: none;">✅</div>
+      <p id="pitch-text">Analyzing pitch...</p>
+    </div>
+
+    <div id="pitchPlot" style="margin-top: 1rem;"></div>
+  </div>
+
+  <script>
+    const form = document.getElementById("hummingForm");
+    const uploadForm = document.getElementById("uploadForm");
+    const statusIcon = document.getElementById("status-icon");
+    const spinner = document.getElementById("spinner");
+    const checkmark = document.getElementById("checkmark");
+    const statusText = document.getElementById("status-text");
+    const audioPlayer = document.getElementById("audioPlayer");
+    const pitchBtn = document.getElementById("pitchButton");
+    const translateBtn = document.getElementById("translateButton");
+    const translateStatus = document.getElementById("translate-status");
+    const translateSpinner = document.getElementById("translate-spinner");
+    const translateCheck = document.getElementById("translate-check");
+    const translateResult = document.getElementById("translate-result");
+    const pitchStatus = document.getElementById("pitch-status");
+    const pitchSpinner = document.getElementById("pitch-spinner");
+    const pitchCheck = document.getElementById("pitch-check");
+    const pitchText = document.getElementById("pitch-text");
+    const pitchPlot = document.getElementById("pitchPlot");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+
+      resetUI("Generating audio...");
+
+      try {
+        const response = await fetch("/generate", { method: "POST", body: formData });
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        audioPlayer.src = url;
+        audioPlayer.style.display = "block";
+        onSuccess("Done!");
+      } catch (err) {
+        onError("Error generating audio.");
+      }
+    });
+
+    uploadForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const formData = new FormData(uploadForm);
+
+      resetUI("Uploading audio...");
+
+      try {
+        const response = await fetch("/upload", { method: "POST", body: formData });
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        audioPlayer.src = url;
+        audioPlayer.style.display = "block";
+        onSuccess("Uploaded!");
+      } catch (err) {
+        onError("Error uploading audio.");
+      }
+    });
+
+    translateBtn.addEventListener("click", async () => {
+      translateStatus.style.display = "block";
+      translateSpinner.style.display = "block";
+      translateCheck.style.display = "none";
+      translateResult.textContent = "Translating...";
+
+      const response = await fetch("/translate", { method: "POST" });
+      const data = await response.json();
+
+      translateSpinner.style.display = "none";
+      translateCheck.style.display = "block";
+      translateResult.textContent = data.output || "Translation complete!";
+    });
+
+    pitchBtn.addEventListener("click", async () => {
+      pitchStatus.style.display = "block";
+      pitchSpinner.style.display = "block";
+      pitchCheck.style.display = "none";
+      pitchText.textContent = "Analyzing pitch...";
+
+      try {
+        const response = await fetch("/analyze-pitch", { method: "POST" });
+        const data = await response.json();
+        pitchSpinner.style.display = "none";
+
+        if (data.image) {
+          pitchCheck.style.display = "block";
+          pitchText.textContent = "Pitch contour displayed below.";
+          pitchPlot.innerHTML = `<img src="data:image/png;base64,${data.image}" alt="Pitch Plot">`;
+        } else {
+          pitchText.textContent = data.error || "Pitch generation failed.";
+        }
+      } catch (err) {
+        pitchSpinner.style.display = "none";
+        pitchText.textContent = "Something went wrong.";
+      }
+    });
+
+    function resetUI(message) {
+      statusIcon.style.display = "block";
+      spinner.style.display = "block";
+      checkmark.style.display = "none";
+      statusText.textContent = message;
+      audioPlayer.style.display = "none";
+      pitchBtn.style.display = "none";
+      pitchPlot.innerHTML = "";
+      pitchStatus.style.display = "none";
+    }
+
+    function onSuccess(message) {
+      spinner.style.display = "none";
+      checkmark.style.display = "block";
+      statusText.textContent = message;
+      pitchBtn.style.display = "inline-block";
+    }
+
+    function onError(message) {
+      spinner.style.display = "none";
+      checkmark.style.display = "none";
+      statusText.textContent = message;
+    }
+  </script>
+</body>
+</html>
